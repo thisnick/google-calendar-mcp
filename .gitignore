@@ -1,0 +1,8 @@
+node_modules/
+build/
+*.log
+.env*
+.client_secret.json
+.gcal-tokens-*.json
+.gcal-settings.json
+.devbox

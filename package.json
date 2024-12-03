@@ -1,0 +1,31 @@
+{
+  "name": "gcal-mcp-server",
+  "version": "0.1.0",
+  "description": "Interact with your google calendar",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "Google Calendar": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "auth": "npm run build && node build/index.js auth"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "0.6.0",
+    "google-auth-library": "^9.15.0",
+    "googleapis": "^144.0.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
+  }
+}
