@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
@@ -19,6 +19,7 @@ import { CreateEventArgsSchema,
   ListCalendarsArgsSchema,
 } from "./types.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 
 const calendar = google.calendar("v3");
 
@@ -66,135 +67,173 @@ function getAuthInstance(accountId?: string): OAuth2Client {
   return auth;
 }
 
-const server = new Server(
-  {
-    name: "Google Calendar",
-    version: "0.1.0",
-  },
-  {
-    capabilities: {
-      resources: {},
-      tools: {},
-    },
-  }
-);
+interface ToolCapability {
+  description: string;
+  inputSchema: any;
+  outputSchema: any;
+}
 
-server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-  const resources = [];
-
-  // List events from all connected accounts
-  for (const [accountId, auth] of Object.entries(authInstances)) {
-    google.options({ auth });
-
-    const timeMin = new Date();
-    timeMin.setDate(timeMin.getDate() - 7); // Last 7 days
-
-    const params = {
-      calendarId: 'primary',
-      timeMin: timeMin.toISOString(),
-      maxResults: 10,
-      singleEvents: true,
-      orderBy: 'startTime'
+interface ServerCapabilities {
+  resources: {
+    [mimeType: string]: {
+      description: string;
     };
-
-    const res = await calendar.events.list(params);
-    const events = res.data.items!;
-
-    // Add events as resources with account prefix
-    resources.push(...events.map(event => ({
-      uri: `gcal://${accountId}/${event.id}`,
-      mimeType: "application/json",
-      name: event.summary || "Untitled Event",
-      description: `${event.start?.dateTime || event.start?.date} - ${event.end?.dateTime || event.end?.date}`
-    })));
-  }
-
-  return { resources };
-});
-
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  // Parse account and event ID from URI
-  const [_, accountId, eventId] = request.params.uri.split('/');
-  const auth = getAuthInstance(accountId);
-
-  if (!auth) {
-    throw new Error(`Account ${accountId} not found`);
-  }
-
-  google.options({ auth });
-
-  const event = await calendar.events.get({
-    calendarId: 'primary',
-    eventId: eventId
-  });
-
-  return {
-    contents: [{
-      uri: request.params.uri,
-      mimeType: "application/json",
-      text: JSON.stringify(event.data, null, 2)
-    }]
   };
-});
-
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "create_event",
-        description: "Create a new calendar event",
-        inputSchema: zodToJsonSchema(CreateEventArgsSchema)
-      },
-      {
-        name: "search_events",
-        description: "Search for calendar events",
-        inputSchema: zodToJsonSchema(SearchEventsArgsSchema)
-      },
-      {
-        name: "list_events",
-        description: "List calendar events",
-        inputSchema: zodToJsonSchema(ListEventsArgsSchema)
-      },
-      {
-        name: "set_calendar_defaults",
-        description: "Set default account and calendar",
-        inputSchema: zodToJsonSchema(SetCalendarDefaultsArgsSchema)
-      },
-      {
-        name: "list_calendar_accounts",
-        description: "List all authenticated Google Calendar accounts",
-        inputSchema: zodToJsonSchema(ListCalendarsArgsSchema)
-      },
-      {
-        name: "list_calendars",
-        description: "List all calendars in an account",
-        inputSchema: zodToJsonSchema(ListCalendarsArgsSchema)
-      }
-    ]
+  tools: {
+    [name: string]: ToolCapability;
   };
+}
+
+// Store tool definitions for reuse
+const toolDefinitions = {
+  create_event: {
+    description: "Create a new calendar event",
+    inputSchema: zodToJsonSchema(CreateEventArgsSchema),
+    outputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["text"] },
+              text: { type: "string" }
+            },
+            required: ["type", "text"]
+          }
+        }
+      },
+      required: ["content"]
+    }
+  },
+  search_events: {
+    description: "Search for calendar events",
+    inputSchema: zodToJsonSchema(SearchEventsArgsSchema),
+    outputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["text"] },
+              text: { type: "string" }
+            },
+            required: ["type", "text"]
+          }
+        }
+      },
+      required: ["content"]
+    }
+  },
+  list_events: {
+    description: "List calendar events",
+    inputSchema: zodToJsonSchema(ListEventsArgsSchema),
+    outputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["text"] },
+              text: { type: "string" }
+            },
+            required: ["type", "text"]
+          }
+        }
+      },
+      required: ["content"]
+    }
+  },
+  set_calendar_defaults: {
+    description: "Set default account and calendar",
+    inputSchema: zodToJsonSchema(SetCalendarDefaultsArgsSchema),
+    outputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["text"] },
+              text: { type: "string" }
+            },
+            required: ["type", "text"]
+          }
+        }
+      },
+      required: ["content"]
+    }
+  },
+  list_calendar_accounts: {
+    description: "List all authenticated Google Calendar accounts",
+    inputSchema: zodToJsonSchema(ListCalendarsArgsSchema),
+    outputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["text"] },
+              text: { type: "string" }
+            },
+            required: ["type", "text"]
+          }
+        }
+      },
+      required: ["content"]
+    }
+  },
+  list_calendars: {
+    description: "List all calendars in an account",
+    inputSchema: zodToJsonSchema(ListCalendarsArgsSchema),
+    outputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["text"] },
+              text: { type: "string" }
+            },
+            required: ["type", "text"]
+          }
+        }
+      },
+      required: ["content"]
+    }
+  }
+};
+
+const server = new McpServer({
+  name: "Google Calendar",
+  version: "0.1.0",
+  protocolVersion: "2.0"
+}, {
+  capabilities: {
+    tools: toolDefinitions
+  }
 });
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const accountId = request.params.arguments?.accountId as string;
-  const auth = getAuthInstance(accountId);
+// Register tools
+server.tool(
+  "create_event",
+  CreateEventArgsSchema.shape,
+  async ({ summary, description, start, end, calendarId, location, accountId }: z.infer<typeof CreateEventArgsSchema>) => {
+    const auth = getAuthInstance(accountId);
+    google.options({ auth });
+    const settings = loadSettings();
 
-  if (!auth) {
-    throw new Error(`Account ${accountId} not found`);
-  }
-
-  google.options({ auth });
-
-  switch (request.params.name) {
-    case "create_event": {
-      const settings = loadSettings();
-      const args = CreateEventArgsSchema.safeParse(request.params.arguments);
-
-      if (!args.success) {
-        throw new Error(`Invalid arguments: ${args.error.message}`);
-      }
-
-      const { summary, description, start, end, calendarId, location } = args.data;
-
+    try {
       const event = await calendar.events.insert({
         calendarId: calendarId || settings.defaultCalendarId || 'primary',
         requestBody: {
@@ -212,17 +251,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: `Created event: ${event.data.htmlLink}`
         }]
       };
+    } catch (error: any) {
+      throw new Error(`Failed to create event: ${error.message}`);
     }
+  }
+);
 
-    case "search_events": {
-      const args = SearchEventsArgsSchema.safeParse(request.params.arguments);
+server.tool(
+  "search_events",
+  SearchEventsArgsSchema.shape,
+  async ({ query, accountId }: z.infer<typeof SearchEventsArgsSchema>) => {
+    const auth = getAuthInstance(accountId);
+    google.options({ auth });
 
-      if (!args.success) {
-        throw new Error(`Invalid arguments: ${args.error.message}`);
-      }
-
-      const { query } = args.data;
-
+    try {
       const res = await calendar.events.list({
         calendarId: 'primary',
         q: query,
@@ -239,33 +281,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: `Found ${res.data.items?.length ?? 0} events:\n${eventList}`
         }]
       };
+    } catch (error: any) {
+      throw new Error(`Failed to search events: ${error.message}`);
     }
+  }
+);
 
-    case "list_events": {
-      const args = ListEventsArgsSchema.safeParse(request.params.arguments);
+server.tool(
+  "list_events",
+  ListEventsArgsSchema.shape,
+  async ({ accountId, calendarId, maxResults = 10, timeMin, timeMax }: z.infer<typeof ListEventsArgsSchema>) => {
+    const auth = getAuthInstance(accountId);
+    google.options({ auth });
 
-      if (!args.success) {
-        throw new Error(`Invalid arguments: ${args.error.message}`);
-      }
+    const defaultTimeMin = new Date();
+    defaultTimeMin.setDate(defaultTimeMin.getDate() - 7);
 
-      const { accountId, calendarId, maxResults = 10, timeMin, timeMax } = args.data;
-      const auth = getAuthInstance(accountId);
-
-      if (!auth) {
-        throw new Error(`Account ${accountId} not found`);
-      }
-
-      google.options({ auth });
-
-      const defaultTimeMin = new Date();
-      defaultTimeMin.setDate(defaultTimeMin.getDate() - 7);
-
-      // If calendarId is provided, list events from that calendar only
+    try {
       if (calendarId) {
         try {
           await calendar.calendars.get({ calendarId });
-        } catch (error) {
-          throw new Error(`Calendar ${calendarId} not found`);
+        } catch (error: any) {
+          throw new Error(`Calendar ${calendarId} not found: ${error.message}`);
         }
 
         const params = {
@@ -290,13 +327,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      // If no calendarId provided, list events from all calendars
       const calendarsResponse = await calendar.calendarList.list();
       const calendars = calendarsResponse.data.items || [];
       let allEvents = [];
 
       for (const cal of calendars) {
-        if (!cal.id) continue; // Skip calendars without IDs
+        if (!cal.id) continue;
 
         const params = {
           calendarId: cal.id,
@@ -316,14 +352,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         })));
       }
 
-      // Sort all events by start time
       allEvents.sort((a, b) => {
         const dateA = a.start ? new Date(a.start).getTime() : 0;
         const dateB = b.start ? new Date(b.start).getTime() : 0;
         return dateA - dateB;
       });
 
-      // Take only the requested number of events
       allEvents = allEvents.slice(0, maxResults);
 
       const eventList = allEvents
@@ -336,29 +370,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: `Events across all calendars for account ${accountId}:\n${eventList}`
         }]
       };
+    } catch (error: any) {
+      throw new Error(`Failed to list events: ${error.message}`);
+    }
+  }
+);
+
+server.tool(
+  "set_calendar_defaults",
+  SetCalendarDefaultsArgsSchema.shape,
+  async ({ accountId, calendarId }: z.infer<typeof SetCalendarDefaultsArgsSchema>) => {
+    if (!authInstances[accountId]) {
+      throw new Error(`Account ${accountId} not found`);
     }
 
-    case "set_calendar_defaults": {
-      const args = SetCalendarDefaultsArgsSchema.safeParse(request.params.arguments);
+    const auth = getAuthInstance(accountId);
+    google.options({ auth });
 
-      if (!args.success) {
-        throw new Error(`Invalid arguments: ${args.error.message}`);
-      }
-
-      const { accountId, calendarId } = args.data;
-
-      // Verify account exists
-      if (!authInstances[accountId]) {
-        throw new Error(`Account ${accountId} not found`);
-      }
-
-      // Verify calendar exists if provided
+    try {
       if (calendarId) {
-        google.options({ auth });
         try {
           await calendar.calendars.get({ calendarId });
-        } catch {
-          throw new Error(`Calendar ${calendarId} not found`);
+        } catch (error: any) {
+          throw new Error(`Calendar ${calendarId} not found: ${error.message}`);
         }
       }
 
@@ -373,9 +407,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: `Default account set to ${accountId}${calendarId ? ` and calendar set to ${calendarId}` : ''}`
         }]
       };
+    } catch (error: any) {
+      throw new Error(`Failed to set calendar defaults: ${error.message}`);
     }
+  }
+);
 
-    case "list_calendar_accounts": {
+server.tool(
+  "list_calendar_accounts",
+  z.object({}).shape,
+  async () => {
+    try {
       const accounts = Object.keys(authInstances).map(accountId => {
         const isDefault = loadSettings().defaultAccountId === accountId;
         return `${isDefault ? '* ' : '- '}${accountId}`;
@@ -387,16 +429,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: accounts ? `Available accounts:\n${accounts}\n(* indicates default account)` : "No accounts configured"
         }]
       };
+    } catch (error: any) {
+      throw new Error(`Failed to list calendar accounts: ${error.message}`);
     }
+  }
+);
 
-    case "list_calendars": {
-      const args = ListCalendarsArgsSchema.safeParse(request.params.arguments);
+server.tool(
+  "list_calendars",
+  ListCalendarsArgsSchema.shape,
+  async ({ accountId }: z.infer<typeof ListCalendarsArgsSchema>) => {
+    const auth = getAuthInstance(accountId);
+    google.options({ auth });
 
-      if (!args.success) {
-        throw new Error(`Invalid arguments: ${args.error.message}`);
-      }
-
-      const { accountId } = args.data;
+    try {
       const calendars = await calendar.calendarList.list();
       const defaultCalendarId = loadSettings().defaultCalendarId;
 
@@ -411,12 +457,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: calendarList ? `Available calendars:\n${calendarList}\n(* indicates default calendar)` : "No calendars found"
         }]
       };
+    } catch (error: any) {
+      throw new Error(`Failed to list calendars: ${error.message}`);
     }
-
-    default:
-      throw new Error("Tool not found");
   }
-});
+);
 
 // Helper to get tokens path for an account
 const getTokensPath = (accountId: string) => {
@@ -443,44 +488,12 @@ function getOAuthClient() {
   );
 }
 
-async function authenticateAccount(accountId: string) {
-  console.log(`Launching auth flow for account ${accountId}...`);
-  const oAuth2Client = getOAuthClient();
-
-  // Generate auth url
-  const authUrl = oAuth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/calendar'],
-    prompt: 'consent' // Forces refresh token generation
-  });
-
-  console.log('Authorize this app by visiting this url:', authUrl);
-
-  // You'll need to implement this to get the code from user input
-  const code = await getAuthorizationCode();
-
-  // Exchange code for tokens
-  const { tokens } = await oAuth2Client.getToken(code);
-  oAuth2Client.setCredentials(tokens);
-
-  // Save tokens
-  fs.writeFileSync(
-    getTokensPath(accountId),
-    JSON.stringify(tokens)
-  );
-
-  console.log(`Tokens saved for account ${accountId}`);
-  return oAuth2Client;
-}
-
 async function loadCredentialsAndRunServer() {
-  // Load all token files
   const tokenFiles = fs.readdirSync(path.join(path.dirname(new URL(import.meta.url).pathname), ".."))
     .filter(f => f.startsWith('.gcal-tokens-'));
 
   if (tokenFiles.length === 0) {
-    console.error("No tokens found. Please run with 'auth <account-id>' first.");
-    process.exit(1);
+    throw new Error("No tokens found. Please run with 'auth <account-id>' first.");
   }
 
   // Initialize auth for each account
@@ -500,13 +513,10 @@ async function loadCredentialsAndRunServer() {
         ...tokens
       };
       fs.writeFileSync(getTokensPath(accountId), JSON.stringify(allTokens));
-      console.log(`Tokens refreshed for account ${accountId}`);
     });
 
     authInstances[accountId] = oAuth2Client;
   }
-
-  console.log(`Loaded tokens for ${Object.keys(authInstances).length} accounts`);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -528,13 +538,42 @@ async function getAuthorizationCode(): Promise<string> {
   });
 }
 
+async function authenticateAccount(accountId: string) {
+  const oAuth2Client = getOAuthClient();
+
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: ['https://www.googleapis.com/auth/calendar'],
+    prompt: 'consent'
+  });
+
+  console.log(`Please authorize this app by visiting: ${authUrl}`);
+
+  const code = await getAuthorizationCode();
+  const { tokens } = await oAuth2Client.getToken(code);
+  oAuth2Client.setCredentials(tokens);
+
+  fs.writeFileSync(
+    getTokensPath(accountId),
+    JSON.stringify(tokens)
+  );
+
+  console.log(`Successfully authenticated ${accountId}`);
+  return oAuth2Client;
+}
+
 if (process.argv[2] === "auth") {
   const accountId = process.argv[3];
   if (!accountId) {
-    console.error("Please provide an account ID");
-    process.exit(1);
+    throw new Error("Please provide an account ID");
   }
-  authenticateAccount(accountId).catch(console.error);
+  authenticateAccount(accountId).catch(error => {
+    console.error("Authentication failed:", error.message);
+    process.exit(1);
+  });
 } else {
-  loadCredentialsAndRunServer().catch(console.error);
+  loadCredentialsAndRunServer().catch(error => {
+    console.error("Server failed:", error.message);
+    process.exit(1);
+  });
 }

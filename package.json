@@ -18,7 +18,7 @@
     "auth": "npm run build && node build/index.js auth"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "0.6.0",
+    "@modelcontextprotocol/sdk": "^1.6.1",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",
     "zod": "^3.23.8",
