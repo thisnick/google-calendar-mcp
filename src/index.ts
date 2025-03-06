@@ -87,7 +87,7 @@ interface ServerCapabilities {
 // Store tool definitions for reuse
 const toolDefinitions = {
   create_event: {
-    description: "Create a new calendar event",
+    description: "Create a new calendar event in Google Calendar. Provide the account ID, event summary, start and end times, and optionally a calendar ID, location, and description.",
     inputSchema: zodToJsonSchema(CreateEventArgsSchema),
     outputSchema: {
       type: "object",
@@ -108,7 +108,7 @@ const toolDefinitions = {
     }
   },
   search_events: {
-    description: "Search for calendar events",
+    description: "Search for calendar events in Google Calendar using a text query. Returns events matching the query text in their title, description, or location.",
     inputSchema: zodToJsonSchema(SearchEventsArgsSchema),
     outputSchema: {
       type: "object",
@@ -129,7 +129,7 @@ const toolDefinitions = {
     }
   },
   list_events: {
-    description: "List calendar events",
+    description: "List upcoming calendar events from Google Calendar. Specify the account ID, optional calendar ID, maximum number of results to return, and optional time range filters.",
     inputSchema: zodToJsonSchema(ListEventsArgsSchema),
     outputSchema: {
       type: "object",
@@ -150,7 +150,7 @@ const toolDefinitions = {
     }
   },
   set_calendar_defaults: {
-    description: "Set default account and calendar",
+    description: "Set the default Google account and optionally the default calendar to use for calendar operations. These defaults will be used when account or calendar are not explicitly specified.",
     inputSchema: zodToJsonSchema(SetCalendarDefaultsArgsSchema),
     outputSchema: {
       type: "object",
@@ -171,8 +171,8 @@ const toolDefinitions = {
     }
   },
   list_calendar_accounts: {
-    description: "List all authenticated Google Calendar accounts",
-    inputSchema: zodToJsonSchema(ListCalendarsArgsSchema),
+    description: "List all authenticated Google Calendar accounts that the user has connected to this server. Shows which account is set as default.",
+    inputSchema: zodToJsonSchema(z.object({})),
     outputSchema: {
       type: "object",
       properties: {
@@ -192,7 +192,7 @@ const toolDefinitions = {
     }
   },
   list_calendars: {
-    description: "List all calendars in an account",
+    description: "List all available calendars for a specific Google account. Requires an account ID and returns calendar names, IDs, and other metadata.",
     inputSchema: zodToJsonSchema(ListCalendarsArgsSchema),
     outputSchema: {
       type: "object",
@@ -214,6 +214,8 @@ const toolDefinitions = {
   }
 };
 
+// Initialize the MCP server with Google Calendar capabilities
+// This server allows models to access and manage Google Calendar events and settings
 const server = new McpServer({
   name: "Google Calendar",
   version: "0.1.0",
@@ -229,6 +231,8 @@ server.tool(
   "create_event",
   CreateEventArgsSchema.shape,
   async ({ summary, description, start, end, calendarId, location, accountId }: z.infer<typeof CreateEventArgsSchema>) => {
+    // Create a new event in Google Calendar with the provided details
+    // Returns the created event ID and a confirmation message
     const auth = getAuthInstance(accountId);
     google.options({ auth });
     const settings = loadSettings();
@@ -261,6 +265,8 @@ server.tool(
   "search_events",
   SearchEventsArgsSchema.shape,
   async ({ query, accountId }: z.infer<typeof SearchEventsArgsSchema>) => {
+    // Search for events in Google Calendar matching the query string
+    // Returns a list of matching events with their details
     const auth = getAuthInstance(accountId);
     google.options({ auth });
 
@@ -291,6 +297,8 @@ server.tool(
   "list_events",
   ListEventsArgsSchema.shape,
   async ({ accountId, calendarId, maxResults = 10, timeMin, timeMax }: z.infer<typeof ListEventsArgsSchema>) => {
+    // List upcoming events from the specified calendar
+    // Returns events with their titles, times, and other details
     const auth = getAuthInstance(accountId);
     google.options({ auth });
 
@@ -380,6 +388,8 @@ server.tool(
   "set_calendar_defaults",
   SetCalendarDefaultsArgsSchema.shape,
   async ({ accountId, calendarId }: z.infer<typeof SetCalendarDefaultsArgsSchema>) => {
+    // Set the default Google account and calendar to use for operations
+    // These defaults will be used when parameters are not explicitly provided
     if (!authInstances[accountId]) {
       throw new Error(`Account ${accountId} not found`);
     }
@@ -417,6 +427,8 @@ server.tool(
   "list_calendar_accounts",
   z.object({}).shape,
   async () => {
+    // List all authenticated Google Calendar accounts
+    // Indicates which account is currently set as the default
     try {
       const accounts = Object.keys(authInstances).map(accountId => {
         const isDefault = loadSettings().defaultAccountId === accountId;
@@ -439,6 +451,8 @@ server.tool(
   "list_calendars",
   ListCalendarsArgsSchema.shape,
   async ({ accountId }: z.infer<typeof ListCalendarsArgsSchema>) => {
+    // List all calendars available in the specified Google account
+    // Returns calendar IDs, names, and attributes
     const auth = getAuthInstance(accountId);
     google.options({ auth });
 
