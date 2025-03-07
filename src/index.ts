@@ -229,6 +229,7 @@ const server = new McpServer({
 // Register tools
 server.tool(
   "create_event",
+  "Create a new calendar event in Google Calendar. Provide the account ID, event summary, start and end times, and optionally a calendar ID, location, and description.",
   CreateEventArgsSchema.shape,
   async ({ summary, description, start, end, calendarId, location, accountId }: z.infer<typeof CreateEventArgsSchema>) => {
     // Create a new event in Google Calendar with the provided details
@@ -263,6 +264,7 @@ server.tool(
 
 server.tool(
   "search_events",
+  "Search for calendar events in Google Calendar using a text query. Returns events matching the query text in their title, description, or location.",
   SearchEventsArgsSchema.shape,
   async ({ query, accountId }: z.infer<typeof SearchEventsArgsSchema>) => {
     // Search for events in Google Calendar matching the query string
@@ -295,6 +297,7 @@ server.tool(
 
 server.tool(
   "list_events",
+  "List upcoming calendar events from Google Calendar. Specify the account ID, optional calendar ID, maximum number of results to return, and optional time range filters.",
   ListEventsArgsSchema.shape,
   async ({ accountId, calendarId, maxResults = 10, timeMin, timeMax }: z.infer<typeof ListEventsArgsSchema>) => {
     // List upcoming events from the specified calendar
@@ -386,6 +389,7 @@ server.tool(
 
 server.tool(
   "set_calendar_defaults",
+  "Set the default Google account and optionally the default calendar to use for calendar operations. These defaults will be used when account or calendar are not explicitly specified.",
   SetCalendarDefaultsArgsSchema.shape,
   async ({ accountId, calendarId }: z.infer<typeof SetCalendarDefaultsArgsSchema>) => {
     // Set the default Google account and calendar to use for operations
@@ -425,6 +429,7 @@ server.tool(
 
 server.tool(
   "list_calendar_accounts",
+  "List all authenticated Google Calendar accounts that the user has connected to this server. Shows which account is set as default.",
   z.object({}).shape,
   async () => {
     // List all authenticated Google Calendar accounts
@@ -449,6 +454,7 @@ server.tool(
 
 server.tool(
   "list_calendars",
+  "List all available calendars for a specific Google account. Requires an account ID and returns calendar names, IDs, and other metadata.",
   ListCalendarsArgsSchema.shape,
   async ({ accountId }: z.infer<typeof ListCalendarsArgsSchema>) => {
     // List all calendars available in the specified Google account
